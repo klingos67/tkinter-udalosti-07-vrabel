@@ -15,7 +15,7 @@ class PresuvanieTvarovApp:
         self.created_count = 0
 
         self._build_ui()
-        self._bind_drag_events()
+        self._bind_mouse_events()
         self._spawn_initial_shapes()
 
     def _build_ui(self) -> None:
@@ -54,15 +54,17 @@ class PresuvanieTvarovApp:
         )
         self.status_label.pack(fill=tk.X)
 
-    def _bind_drag_events(self) -> None:
+    def _bind_mouse_events(self) -> None:
         self.canvas.bind("<ButtonPress-1>", self.on_left_press)
         self.canvas.bind("<B1-Motion>", self.on_left_drag)
         self.canvas.bind("<ButtonRelease-1>", self.on_left_release)
+        self.canvas.bind("<ButtonPress-3>", self.on_right_click)
+        self.canvas.bind("<ButtonPress-2>", self.on_right_click)
 
     def _spawn_initial_shapes(self) -> None:
         self._create_shape(180, 180, shape_type="circle", fill="#2ecc71")
         self._create_shape(360, 210, shape_type="square", fill="#27ae60")
-        self._update_status("Načítané ukážkové tvary. Potiahni ich ľavým tlačidlom.")
+        self._update_status("Načítané ukážkové tvary. Ľavé = presun, pravé = zmazať.")
 
     def _create_shape(self, x: int, y: int, shape_type: str | None = None, fill: str | None = None) -> int:
         kind = shape_type if shape_type in ("circle", "square") else self.spawn_mode
@@ -109,36 +111,63 @@ class PresuvanieTvarovApp:
 
     # Callback 1: Reaguje na stlačenie ľavého tlačidla myši (<ButtonPress-1>) na plátne
     def on_left_press(self, event: tk.Event) -> None:
-        x, y = event.x, event.y
-        target = self._find_top_shape_at(x, y)
-        if target is not None:
-            self.dragged_item = target
-            self.last_x = x
-            self.last_y = y
-            self.canvas.tag_raise(self.dragged_item)
-            self._update_status(f"Presúvam tvar #{self.dragged_item} z ({x}, {y}).")
-        else:
+        try:
+            x, y = event.x, event.y
+            target = self._find_top_shape_at(x, y)
+            if target is not None:
+                self.dragged_item = target
+                self.last_x = x
+                self.last_y = y
+                self.canvas.tag_raise(self.dragged_item)
+                self._update_status(f"Presúvam tvar #{self.dragged_item} z ({x}, {y}).")
+            else:
+                self.dragged_item = None
+                self._update_status(f"Klik na prázdne miesto ({x}, {y}).")
+        except Exception as exc:
             self.dragged_item = None
-            self._update_status(f"Klik na prázdne miesto ({x}, {y}).")
+            self._update_status(f"Ošetrená chyba pri kliknutí: {exc}")
 
     # Callback 2: Reaguje na ťahanie myšou so stlačeným ľavým tlačidlom (<B1-Motion>)
     def on_left_drag(self, event: tk.Event) -> None:
-        if self.dragged_item is None:
-            return
-        x, y = event.x, event.y
-        dx = x - self.last_x
-        dy = y - self.last_y
-        self.canvas.move(self.dragged_item, dx, dy)
-        self.last_x = x
-        self.last_y = y
-        self._update_status(f"Tvar #{self.dragged_item} na súradniciach ({x}, {y}).")
+        try:
+            if self.dragged_item is None:
+                return
+            x, y = event.x, event.y
+            dx = x - self.last_x
+            dy = y - self.last_y
+            self.canvas.move(self.dragged_item, dx, dy)
+            self.last_x = x
+            self.last_y = y
+            self._update_status(f"Tvar #{self.dragged_item} na súradniciach ({x}, {y}).")
+        except Exception as exc:
+            self.dragged_item = None
+            self._update_status(f"Ošetrená chyba pri ťahaní: {exc}")
 
     # Callback 3: Reaguje na uvoľnenie ľavého tlačidla myši (<ButtonRelease-1>)
     def on_left_release(self, event: tk.Event) -> None:
-        if self.dragged_item is not None:
-            released_id = self.dragged_item
+        try:
+            if self.dragged_item is not None:
+                released_id = self.dragged_item
+                self.dragged_item = None
+                self._update_status(f"Tvar #{released_id} položený na ({event.x}, {event.y}).")
+        except Exception as exc:
             self.dragged_item = None
-            self._update_status(f"Tvar #{released_id} položený na ({event.x}, {event.y}).")
+            self._update_status(f"Ošetrená chyba pri uvoľnení: {exc}")
+
+    # Callback 4: Reaguje na kliknutie pravým tlačidlom myši (<ButtonPress-3> / <ButtonPress-2>) – maže tvar
+    def on_right_click(self, event: tk.Event) -> None:
+        try:
+            x, y = event.x, event.y
+            target = self._find_top_shape_at(x, y)
+            if target is not None:
+                if self.dragged_item == target:
+                    self.dragged_item = None
+                self.canvas.delete(target)
+                self._update_status(f"Zmazaný tvar #{target} na ({x}, {y}).")
+            else:
+                self._update_status(f"Pravý klik na ({x}, {y}) – pod kurzorom nie je žiadny tvar.")
+        except Exception as exc:
+            self._update_status(f"Ošetrená chyba pri mazaní: {exc}")
 
     def _update_status(self, message: str) -> None:
         rezim = "Kruh" if self.spawn_mode == "circle" else "Štvorec"
